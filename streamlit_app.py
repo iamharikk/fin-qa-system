@@ -98,7 +98,6 @@ class SimpleRAGSystem:
                 'success': False,
                 'answer': "Please enter a valid question about TCS financial data.",
                 'confidence_score': 0.0,
-                'method_used': 'Input Validation',
                 'response_time': time.time() - start_time,
                 'retrieved_info': []
             }
@@ -125,59 +124,71 @@ class SimpleRAGSystem:
             'success': True,
             'answer': answer,
             'confidence_score': confidence,
-            'method_used': 'TF-IDF Retrieval',
             'response_time': processing_time,
             'retrieved_info': retrieved_results
+        }
+
+class FineTunedModel:
+    """Placeholder for fine-tuned model"""
+    
+    def process_query(self, query: str) -> Dict[str, Any]:
+        start_time = time.time()
+        
+        # Placeholder response for fine-tuned model
+        answer = "Fine-tuned model response: This feature is under development. Currently showing placeholder results."
+        
+        return {
+            'success': True,
+            'answer': answer,
+            'confidence_score': 0.85,
+            'response_time': time.time() - start_time,
+            'retrieved_info': []
         }
 
 def main():
     """Main Streamlit application"""
     st.set_page_config(
         page_title="TCS Financial Q&A System",
-        layout="wide"
+        initial_sidebar_state="collapsed"
     )
     
     st.title("TCS Financial Q&A System")
-    st.markdown("---")
     
-    st.markdown("""
-    **Simple RAG System for TCS Financial Data**
-    
-    Ask questions about TCS revenue, profits, expenses, and other financial metrics for 2024 and 2025.
-    """)
-    
-    # Initialize system
+    # Initialize systems
     if 'rag_system' not in st.session_state:
-        with st.spinner("Initializing system..."):
-            st.session_state.rag_system = SimpleRAGSystem()
-            data_count = st.session_state.rag_system.load_sample_data()
-            st.success(f"System ready with {data_count} financial data points!")
+        st.session_state.rag_system = SimpleRAGSystem()
+        st.session_state.rag_system.load_sample_data()
     
-    st.markdown("---")
+    if 'finetuned_system' not in st.session_state:
+        st.session_state.finetuned_system = FineTunedModel()
     
-    # Query input
-    st.subheader("Ask Your Question")
+    # Model selection radio buttons
+    model_choice = st.radio(
+        "Select Model:",
+        ["RAG System", "Fine Tuned Model"],
+        horizontal=True
+    )
     
+    # Query input text area
     user_query = st.text_area(
         "Enter your query about TCS financial data:",
         height=100,
         placeholder="Example: What was TCS revenue in 2025?"
     )
     
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        ask_button = st.button("Ask", type="primary")
+    # Ask button
+    ask_button = st.button("Ask", type="primary")
     
-    # Process query
+    # Process query and show output
     if ask_button and user_query.strip():
-        with st.spinner("Processing your question..."):
-            result = st.session_state.rag_system.process_query(user_query.strip())
+        with st.spinner("Processing..."):
+            if model_choice == "RAG System":
+                result = st.session_state.rag_system.process_query(user_query.strip())
+            else:
+                result = st.session_state.finetuned_system.process_query(user_query.strip())
         
-        # Display results
-        st.markdown("---")
-        st.subheader("Results")
-        
-        # Answer
+        # Output section
+        st.markdown("### Answer")
         if result['success'] and result['confidence_score'] > 0.3:
             st.success(result['answer'])
         elif result['success'] and result['confidence_score'] > 0.1:
@@ -185,53 +196,17 @@ def main():
         else:
             st.error(result['answer'])
         
-        # Metrics
+        # Metrics display
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             st.metric("Confidence Score", f"{result['confidence_score']:.2f}")
-        
         with col2:
-            st.metric("Method Used", result['method_used'])
-        
+            st.metric("Method Used", model_choice)
         with col3:
             st.metric("Response Time", f"{result['response_time']:.2f}s")
-        
-        # Retrieved information
-        if result.get('retrieved_info'):
-            with st.expander("Retrieved Context"):
-                for i, info in enumerate(result['retrieved_info'], 1):
-                    st.markdown(f"**Result {i}** (Similarity: {info['similarity_score']:.3f})")
-                    st.write(f"Q: {info['question']}")
-                    st.write(f"A: {info['answer']}")
-                    if i < len(result['retrieved_info']):
-                        st.markdown("---")
     
     elif ask_button and not user_query.strip():
         st.warning("Please enter a question about TCS financial data.")
-    
-    # Sample queries
-    st.markdown("---")
-    st.subheader("Try These Sample Queries")
-    
-    sample_queries = [
-        "What was TCS revenue in 2025?",
-        "TCS profit in 2024",
-        "Employee costs for TCS",
-        "TCS cash and bank balance"
-    ]
-    
-    cols = st.columns(len(sample_queries))
-    for i, query in enumerate(sample_queries):
-        with cols[i]:
-            if st.button(query, key=f"sample_{i}"):
-                result = st.session_state.rag_system.process_query(query)
-                
-                st.markdown("---")
-                st.subheader("Sample Query Result")
-                st.write(f"**Question:** {query}")
-                st.write(f"**Answer:** {result['answer']}")
-                st.write(f"**Confidence:** {result['confidence_score']:.2f}")
 
 if __name__ == "__main__":
     main()
