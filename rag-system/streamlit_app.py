@@ -8,7 +8,7 @@ from typing import Dict, Any
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from embedding_indexer import EmbeddingIndexer
-from response_generator import ResponseGenerator
+from simple_response_generator import SimpleResponseGenerator
 from guardrails import RAGGuardrails
 
 class StreamlitRAGApp:
@@ -41,7 +41,7 @@ class StreamlitRAGApp:
             indexer.load_indexes(indexes_path)
             
             # Initialize RAG system and guardrails
-            rag_system = ResponseGenerator(indexer)
+            rag_system = SimpleResponseGenerator(indexer)
             guardrails = RAGGuardrails()
             
             return indexer, rag_system, guardrails, True
@@ -107,7 +107,7 @@ class StreamlitRAGApp:
             # Apply output guardrails
             final_validation = self.guardrails.apply_guardrails(
                 query, 
-                rag_result['generated_answer'], 
+                rag_result['extracted_answer'], 
                 rag_result['retrieved_chunks']
             )
             
@@ -115,9 +115,9 @@ class StreamlitRAGApp:
             
             # Determine final answer
             if final_validation['overall_valid']:
-                final_answer = rag_result['generated_answer']
+                final_answer = rag_result['extracted_answer']
                 confidence = final_validation['final_confidence']
-                method = "Multi-stage RAG"
+                method = "Context Extraction RAG"
             else:
                 final_answer = self.guardrails.create_safe_response(final_validation)
                 confidence = 0.2
