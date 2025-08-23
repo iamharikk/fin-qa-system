@@ -29,11 +29,16 @@ class StreamlitRAGApp:
         Initialize RAG system components (cached for performance)
         """
         try:
+            # Get correct paths
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            indexes_path = os.path.join(project_root, "data", "indexes")
+            
             # Initialize components
             indexer = EmbeddingIndexer("all-MiniLM-L6-v2")
             
             # Load pre-built indexes
-            indexer.load_indexes("../data/indexes")
+            indexer.load_indexes(indexes_path)
             
             # Initialize RAG system and guardrails
             rag_system = ResponseGenerator(indexer)
@@ -231,9 +236,9 @@ class StreamlitRAGApp:
         # Check if system is ready
         if not self.system_initialized:
             st.error("System initialization failed. Please check that:")
-            st.write("1. Run `python run_full_pipeline.py` first")
-            st.write("2. Install requirements: `pip install -r ../requirements.txt`")
-            st.write("3. Ensure index files exist in `../data/indexes/`")
+            st.write("1. Run `python rag-system/run_full_pipeline.py` first from the project root")
+            st.write("2. Install requirements: `pip install -r requirements.txt`")
+            st.write("3. Ensure the TCS dataset exists in `data/tcs_qa_dataset.csv`")
             st.stop()
         
         # Render main interface
