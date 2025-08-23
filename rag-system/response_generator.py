@@ -233,8 +233,14 @@ if __name__ == "__main__":
     indexer = EmbeddingIndexer("all-MiniLM-L6-v2")
     
     try:
+        # Get correct path for indexes
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        indexes_path = os.path.join(project_root, "data", "indexes")
+        
         # Load saved indexes
-        indexer.load_indexes("../data/indexes")
+        indexer.load_indexes(indexes_path)
         
         # Create complete RAG system
         rag_system = ResponseGenerator(indexer)
