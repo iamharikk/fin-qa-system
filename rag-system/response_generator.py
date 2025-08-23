@@ -50,19 +50,16 @@ class ResponseGenerator:
         Returns:
             Formatted prompt string for the language model
         """
-        # Start with instruction and context
-        prompt = "Answer the following question based on the provided financial information about TCS.\n\n"
+        # Create a simple, effective prompt for DistilGPT2
+        prompt = "Based on TCS financial data:\n\n"
         
-        # Add retrieved context
-        prompt += "Context:\n"
-        for i, chunk in enumerate(retrieved_chunks, 1):
-            # Extract key information from chunk text
-            chunk_text = chunk['chunk_text']
-            prompt += f"{i}. {chunk_text}\n"
+        # Add retrieved context (keep it concise)
+        for i, chunk in enumerate(retrieved_chunks[:2], 1):  # Limit to top 2 chunks
+            chunk_text = chunk['chunk_text'][:300]  # Limit chunk length
+            prompt += f"Fact {i}: {chunk_text}\n"
         
-        # Add the question
-        prompt += f"\nQuestion: {query}\n"
-        prompt += "Answer:"
+        # Add the question and answer prompt
+        prompt += f"\nQuestion: {query}\nAnswer: TCS"
         
         return prompt
     
@@ -76,8 +73,8 @@ class ResponseGenerator:
         Returns:
             Truncated prompt that fits within token limit
         """
-        # Tokenize the prompt
-        tokens = self.tokenizer.encode(prompt)
+        # Tokenize the prompt to check length
+        tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
         
         # Calculate available tokens (total - generation space)
         available_tokens = self.max_context_length - self.max_generation_length
@@ -85,11 +82,11 @@ class ResponseGenerator:
         # Truncate if necessary
         if len(tokens) > available_tokens:
             # Keep the beginning (instruction) and end (question)
-            truncated_tokens = tokens[:available_tokens]
+            truncated_tokens = tokens[:available_tokens-10]  # Leave some buffer
             prompt = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
             prompt += "\nAnswer:"  # Ensure it ends with answer prompt
             
-            print(f"Prompt truncated to {available_tokens} tokens")
+            print(f"Prompt truncated to fit {available_tokens} tokens")
         
         return prompt
     
@@ -103,33 +100,47 @@ class ResponseGenerator:
         Returns:
             Generated answer string
         """
-        # Tokenize input prompt
-        inputs = self.tokenizer.encode(prompt, return_tensors="pt")
+        # Tokenize input prompt with attention mask
+        inputs = self.tokenizer(
+            prompt, 
+            return_tensors="pt", 
+            padding=True, 
+            truncation=True,
+            max_length=self.max_context_length - self.max_generation_length
+        )
         
         # Generate response with controlled parameters
         with torch.no_grad():  # Disable gradients for inference
             outputs = self.generator_model.generate(
-                inputs,
-                max_length=inputs.shape[1] + self.max_generation_length,  # Original + new tokens
+                inputs.input_ids,
+                attention_mask=inputs.attention_mask,  # Add attention mask
+                max_length=inputs.input_ids.shape[1] + self.max_generation_length,
                 num_return_sequences=1,      # Generate one response
                 temperature=0.7,             # Control randomness (lower = more focused)
                 do_sample=True,              # Enable sampling for variety
                 pad_token_id=self.tokenizer.eos_token_id,
                 eos_token_id=self.tokenizer.eos_token_id,
-                early_stopping=True,        # Stop at end-of-sequence token
                 no_repeat_ngram_size=3      # Avoid repetitive phrases
             )
         
         # Decode generated response
         generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        # Extract only the generated answer (after "Answer:")
-        if "Answer:" in generated_text:
+        # Extract only the generated answer (after "Answer: TCS")
+        if "Answer: TCS" in generated_text:
+            answer = "TCS" + generated_text.split("Answer: TCS")[-1].strip()
+        elif "Answer:" in generated_text:
             answer = generated_text.split("Answer:")[-1].strip()
         else:
+            # Fallback: get text after the prompt
             answer = generated_text[len(prompt):].strip()
         
-        return answer
+        # Clean up the answer
+        answer = answer.split('\n')[0]  # Take only first line
+        if len(answer) > 200:  # Limit answer length
+            answer = answer[:200] + "..."
+            
+        return answer if answer else "No answer generated."
     
     def complete_rag_pipeline(self, query: str, stage1_k: int = 15, final_k: int = 3) -> Dict[str, Any]:
         """
