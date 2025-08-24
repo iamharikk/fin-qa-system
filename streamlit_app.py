@@ -8,6 +8,7 @@ import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Dict, Any, List
+from guardrails import validate_all_inputs
 
 # Add fine-tuned-system to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'fine-tuned-system'))
@@ -216,29 +217,35 @@ def main():
     
     # Process query and show output
     if ask_button and user_query.strip():
-        with st.spinner("Processing..."):
-            if model_choice == "RAG System":
-                result = st.session_state.rag_system.process_query(user_query.strip())
-            else:
-                result = st.session_state.finetuned_system.process_query(user_query.strip())
+        # Validate inputs using guardrails
+        is_valid, error_message = validate_all_inputs(user_query.strip(), model_choice)
         
-        # Output section
-        st.markdown("### Answer")
-        if result['success'] and result['confidence_score'] > 0.3:
-            st.success(result['answer'])
-        elif result['success'] and result['confidence_score'] > 0.1:
-            st.warning(result['answer'])
+        if not is_valid:
+            st.error(f"Input validation failed: {error_message}")
         else:
-            st.error(result['answer'])
-        
-        # Metrics display
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Confidence Score", f"{result['confidence_score']:.2f}")
-        with col2:
-            st.metric("Method Used", model_choice)
-        with col3:
-            st.metric("Response Time", f"{result['response_time']:.2f}s")
+            with st.spinner("Processing..."):
+                if model_choice == "RAG System":
+                    result = st.session_state.rag_system.process_query(user_query.strip())
+                else:
+                    result = st.session_state.finetuned_system.process_query(user_query.strip())
+            
+            # Output section
+            st.markdown("### Answer")
+            if result['success'] and result['confidence_score'] > 0.3:
+                st.success(result['answer'])
+            elif result['success'] and result['confidence_score'] > 0.1:
+                st.warning(result['answer'])
+            else:
+                st.error(result['answer'])
+            
+            # Metrics display
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Confidence Score", f"{result['confidence_score']:.2f}")
+            with col2:
+                st.metric("Method Used", model_choice)
+            with col3:
+                st.metric("Response Time", f"{result['response_time']:.2f}s")
     
     elif ask_button and not user_query.strip():
         st.warning("Please enter a question about TCS financial data.")
