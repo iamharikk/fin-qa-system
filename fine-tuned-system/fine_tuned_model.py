@@ -1,6 +1,8 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering, pipeline
 import time
+import json
+import os
 from typing import Dict, Any
 
 class FineTunedFinQA:
@@ -9,30 +11,45 @@ class FineTunedFinQA:
     Uses the model from Hugging Face Hub: iamharikk/fin-qa-model1
     """
     
-    def __init__(self, model_name: str = "iamharikk/fin-qa-model1"):
+    def __init__(self, model_name: str = "iamharikk/fin-qa-model1", use_local_model: bool = False, local_model_path: str = "./models/distilbert_financial_qa_improved"):
         """
-        Initialize the fine-tuned model from Hugging Face
+        Initialize the fine-tuned model
         
         Args:
-            model_name: Hugging Face model identifier
+            model_name: Hugging Face model identifier (for external model)
+            use_local_model: Whether to use locally trained model
+            local_model_path: Path to local model directory
         """
         self.model_name = model_name
+        self.use_local_model = use_local_model
+        self.local_model_path = local_model_path
         self.tokenizer = None
         self.model = None
         self.qa_pipeline = None
         self.initialized = False
+        self.context = None
         
-        print(f"Initializing fine-tuned DistilBERT model: {model_name}")
+        model_type = "local" if use_local_model else "Hugging Face"
+        model_path = local_model_path if use_local_model else model_name
+        print(f"Initializing {model_type} DistilBERT model: {model_path}")
     
     def load_model(self):
         """Load the fine-tuned model and tokenizer"""
         try:
-            # Load tokenizer and model from Hugging Face Hub
-            print("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            
-            print("Loading DistilBERT model...")
-            self.model = AutoModelForQuestionAnswering.from_pretrained(self.model_name)
+            if self.use_local_model:
+                # Load local model
+                print("Loading local tokenizer...")
+                self.tokenizer = AutoTokenizer.from_pretrained(self.local_model_path)
+                
+                print("Loading local DistilBERT model...")
+                self.model = AutoModelForQuestionAnswering.from_pretrained(self.local_model_path)
+            else:
+                # Load from Hugging Face Hub
+                print("Loading tokenizer from Hugging Face...")
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                
+                print("Loading DistilBERT model from Hugging Face...")
+                self.model = AutoModelForQuestionAnswering.from_pretrained(self.model_name)
             
             # Create question-answering pipeline
             self.qa_pipeline = pipeline(
@@ -42,36 +59,55 @@ class FineTunedFinQA:
                 device=0 if torch.cuda.is_available() else -1  # Use GPU if available
             )
             
+            # Load context from JSON if available, otherwise use hardcoded
+            self.load_context()
+            
             self.initialized = True
-            print("Fine-tuned DistilBERT model loaded successfully!")
+            model_type = "local" if self.use_local_model else "Hugging Face"
+            print(f"{model_type} DistilBERT model loaded successfully!")
             
         except Exception as e:
             print(f"Error loading model: {e}")
             self.initialized = False
     
-    def create_context(self) -> str:
-        """
-        Create context from TCS financial data for the QA model
-        Since DistilBERT QA needs context, we provide the financial data
-        """
-        context = """
+    def load_context(self):
+        """Load context from JSON file or use hardcoded fallback"""
+        try:
+            # Try to load context from JSON file
+            json_path = os.path.join(os.path.dirname(__file__), '../data/distilbert_simple_format.json')
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if data and len(data) > 0:
+                self.context = data[0]['context']
+                print(f"Context loaded from JSON: {len(self.context)} characters")
+                return
+        except Exception as e:
+            print(f"Could not load context from JSON: {e}")
+        
+        # Fallback to updated hardcoded context with correct values from CSV
+        self.context = """
         TCS Financial Data:
-        TCS revenue in 2025 was Rs 21485300 crores. TCS revenue in 2024 was Rs 20235900 crores.
-        TCS other income in 2025 was Rs 950700 crores. TCS other income in 2024 was Rs 626800 crores.
-        TCS total income in 2025 was Rs 22436000 crores. TCS total income in 2024 was Rs 20862700 crores.
-        TCS net profit in 2025 was Rs 4805700 crores. TCS net profit in 2024 was Rs 4355900 crores.
-        TCS operating profit in 2025 was Rs 5792900 crores. TCS operating profit in 2024 was Rs 5584700 crores.
-        TCS profit before tax in 2025 was Rs 6251300 crores. TCS profit before tax in 2024 was Rs 5755500 crores.
-        TCS employee cost in 2025 was Rs 10730000 crores. TCS employee cost in 2024 was Rs 10313900 crores.
-        TCS total expenses in 2025 were Rs 15692400 crores. TCS total expenses in 2024 were Rs 14651200 crores.
-        TCS cash and bank balance in 2025 was Rs 715200 crores. TCS cash and bank balance in 2024 was Rs 659900 crores.
-        TCS sundry debtors in 2025 were Rs 5176700 crores. TCS sundry debtors in 2024 were Rs 4606800 crores.
-        TCS investments in 2025 were Rs 3280200 crores. TCS investments in 2024 were Rs 3224500 crores.
-        TCS earnings per share in 2025 was Rs 13282. TCS earnings per share in 2024 was Rs 12039.
-        TCS book value per share in 2025 was Rs 20900. TCS book value per share in 2024 was Rs 19933.
-        TCS networth in 2025 was Rs 7561700 crores. TCS networth in 2024 was Rs 7212000 crores.
+        TCS sales turnover in 2025 was Rs 214853 crores. TCS sales turnover in 2024 was Rs 202359 crores.
+        TCS total income in 2025 was Rs 224360 crores. TCS total income in 2024 was Rs 208627 crores.
+        TCS other income in 2025 was Rs 9507 crores. TCS other income in 2024 was Rs 6268 crores.
+        TCS reported net profit in 2025 was Rs 48057 crores. TCS reported net profit in 2024 was Rs 43559 crores.
+        TCS operating profit in 2025 was Rs 57929 crores. TCS operating profit in 2024 was Rs 55847 crores.
+        TCS profit before tax in 2025 was Rs 62513 crores. TCS profit before tax in 2024 was Rs 57555 crores.
+        TCS employee cost in 2025 was Rs 107300 crores. TCS employee cost in 2024 was Rs 103139 crores.
+        TCS total expenses in 2025 were Rs 156924 crores. TCS total expenses in 2024 were Rs 146512 crores.
+        TCS earnings per share in 2025 was Rs 132. TCS earnings per share in 2024 was Rs 120.
+        TCS book value per share in 2025 was Rs 209. TCS book value per share in 2024 was Rs 199.
+        TCS cash and bank balance in 2025 was Rs 7152 crores. TCS cash and bank balance in 2024 was Rs 6599 crores.
+        TCS sundry debtors in 2025 were Rs 51767 crores. TCS sundry debtors in 2024 were Rs 46068 crores.
+        TCS investments in 2025 were Rs 32802 crores. TCS investments in 2024 were Rs 32245 crores.
+        TCS networth in 2025 was Rs 75617 crores. TCS networth in 2024 was Rs 72120 crores.
         """
-        return context
+        print("Using fallback hardcoded context with correct values")
+    
+    def create_context(self) -> str:
+        """Return the loaded context"""
+        return self.context if self.context else ""
     
     def process_query(self, query: str) -> Dict[str, Any]:
         """
