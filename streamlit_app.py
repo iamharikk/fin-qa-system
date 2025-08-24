@@ -278,19 +278,10 @@ def main():
                     result['answer'] = validation['corrected_response']
                     result['confidence_score'] = max(0.0, result['confidence_score'] * validation['validation_score'])
                 
-                # Show validation warnings for serious issues only (not format issues)
-                serious_warnings = []
-                for warning in validation['warnings']:
-                    # Only show warnings for hallucination, factual inconsistency, and unrealistic values
-                    if any(issue in warning.lower() for issue in [
-                        'factual inconsistency', 'hallucination', 'unrealistic', 
-                        'unsupported numbers', 'contradictory', 'future years'
-                    ]):
-                        serious_warnings.append(warning)
-                
-                if serious_warnings:
+                # Show validation warnings if any
+                if validation['warnings']:
                     with st.expander("Output Validation Warnings"):
-                        for warning in serious_warnings:
+                        for warning in validation['warnings']:
                             st.warning(warning)
             
             # Output section
