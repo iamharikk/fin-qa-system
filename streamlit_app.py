@@ -203,32 +203,10 @@ def main():
     if 'output_guardrails' not in st.session_state:
         st.session_state.output_guardrails = OutputGuardrails()
     
-    # Initialize Advanced RAG System
-    if 'advanced_rag' not in st.session_state:
-        try:
-            from simple_rag import SimpleAdvancedRAG
-            
-            csv_path = "data/tcs_qa_dataset.csv"
-            
-            if os.path.exists(csv_path):
-                st.session_state.advanced_rag = SimpleAdvancedRAG(csv_path)
-                if st.session_state.advanced_rag.initialized:
-                    st.success("Advanced RAG System initialized!")
-                else:
-                    st.error("Failed to initialize Advanced RAG System.")
-                    st.session_state.advanced_rag = None
-            else:
-                st.error("TCS dataset not found. Advanced RAG unavailable.")
-                st.session_state.advanced_rag = None
-                
-        except Exception as e:
-            st.error(f"Failed to initialize Advanced RAG: {e}")
-            st.session_state.advanced_rag = None
-    
     # Model selection radio buttons
     model_choice = st.radio(
         "Select Model:",
-        ["Advanced RAG System", "Fine Tuned Model"],
+        ["RAG System", "Fine Tuned Model"],
         horizontal=True
     )
     
@@ -251,17 +229,8 @@ def main():
             st.error(f"Input validation failed: {error_message}")
         else:
             with st.spinner("Processing..."):
-                if model_choice == "Advanced RAG System":
-                    if st.session_state.advanced_rag:
-                        # Use advanced RAG system
-                        result = st.session_state.advanced_rag.process_query(user_query.strip())
-                    else:
-                        result = {
-                            'success': False,
-                            'answer': "Advanced RAG system is not available.",
-                            'confidence_score': 0.0,
-                            'response_time': 0.0
-                        }
+                if model_choice == "RAG System":
+                    result = st.session_state.rag_system.process_query(user_query.strip())
                 else:
                     result = st.session_state.finetuned_system.process_query(user_query.strip())
             
