@@ -3,9 +3,14 @@ import pandas as pd
 import numpy as np
 import time
 import re
+import sys
+import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Dict, Any, List
+
+# Add fine-tuned-system to path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), 'fine-tuned-system'))
 
 class SimpleRAGSystem:
     """
@@ -129,19 +134,48 @@ class SimpleRAGSystem:
         }
 
 class FineTunedModel:
-    """Placeholder for fine-tuned model"""
+    """Fine-tuned model wrapper for Streamlit"""
+    
+    def __init__(self):
+        self.model = None
+        self.initialized = False
+    
+    def load_model(self):
+        """Load the fine-tuned model"""
+        try:
+            from fine_tuned_model import FineTunedFinQA
+            self.model = FineTunedFinQA()
+            self.model.load_model()
+            self.initialized = self.model.initialized
+        except Exception as e:
+            print(f"Error loading fine-tuned model: {e}")
+            self.initialized = False
     
     def process_query(self, query: str) -> Dict[str, Any]:
         start_time = time.time()
         
-        # Placeholder response for fine-tuned model
-        answer = "Fine-tuned model response: This feature is under development. Currently showing placeholder results."
+        # Load model if not initialized
+        if not self.initialized:
+            self.load_model()
+        
+        # If still not initialized, return error
+        if not self.initialized:
+            return {
+                'success': False,
+                'answer': "Fine-tuned model could not be loaded. Using fallback response.",
+                'confidence_score': 0.0,
+                'response_time': time.time() - start_time,
+                'retrieved_info': []
+            }
+        
+        # Use the fine-tuned model
+        result = self.model.process_query(query)
         
         return {
-            'success': True,
-            'answer': answer,
-            'confidence_score': 0.85,
-            'response_time': time.time() - start_time,
+            'success': result['success'],
+            'answer': result['answer'],
+            'confidence_score': result['confidence_score'],
+            'response_time': result['response_time'],
             'retrieved_info': []
         }
 
