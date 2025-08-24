@@ -1,12 +1,23 @@
-import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import pandas as pd
 import re
 import time
 from typing import List, Dict, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+# Try to import optional dependencies
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 class QueryPreprocessor:
     def __init__(self):
@@ -99,12 +110,22 @@ class BM25:
 class SimpleAdvancedRAG:
     def __init__(self, csv_path: str = None):
         """Initialize the Advanced RAG system"""
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.preprocessor = QueryPreprocessor()
         self.documents = []
         self.dense_index = None
         self.sparse_index = None
+        self.tfidf_vectorizer = None
+        self.tfidf_matrix = None
+        self.use_dense = FAISS_AVAILABLE and SENTENCE_TRANSFORMERS_AVAILABLE
         self.initialized = False
+        
+        # Initialize sentence transformer if available
+        if self.use_dense:
+            try:
+                self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            except Exception as e:
+                print(f"Failed to load sentence transformer: {e}")
+                self.use_dense = False
         
         if csv_path:
             self.load_data(csv_path)
@@ -126,30 +147,57 @@ class SimpleAdvancedRAG:
                     'id': len(self.documents)
                 })
             
-            # Create embeddings
             document_texts = [doc['text'] for doc in self.documents]
-            document_embeddings = self.model.encode(document_texts, convert_to_tensor=False)
             
-            # Build FAISS index
-            dim = document_embeddings.shape[1]
-            self.dense_index = faiss.IndexFlatL2(dim)
-            self.dense_index.add(np.array(document_embeddings).astype('float32'))
+            # Try to use dense embeddings if available
+            if self.use_dense:
+                try:
+                    document_embeddings = self.model.encode(document_texts, convert_to_tensor=False)
+                    
+                    # Build FAISS index
+                    dim = document_embeddings.shape[1]
+                    self.dense_index = faiss.IndexFlatL2(dim)
+                    self.dense_index.add(np.array(document_embeddings).astype('float32'))
+                    
+                    # Build BM25 index
+                    self.sparse_index = BM25(document_texts)
+                    
+                    print(f"Advanced RAG initialized with dense+sparse retrieval, {len(self.documents)} documents")
+                except Exception as e:
+                    print(f"Dense embedding failed, falling back to TF-IDF: {e}")
+                    self.use_dense = False
             
-            # Build BM25 index
-            self.sparse_index = BM25(document_texts)
+            # Fallback to TF-IDF if dense retrieval is not available
+            if not self.use_dense:
+                self.tfidf_vectorizer = TfidfVectorizer(
+                    stop_words='english',
+                    lowercase=True,
+                    ngram_range=(1, 2),
+                    max_features=1000
+                )
+                self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(document_texts)
+                print(f"RAG initialized with TF-IDF retrieval, {len(self.documents)} documents")
             
             self.initialized = True
-            print(f"Advanced RAG initialized with {len(self.documents)} documents")
             
         except Exception as e:
             print(f"Error loading data: {e}")
             self.initialized = False
     
     def retrieve(self, query: str, k: int = 5, alpha: float = 0.7) -> List[Dict[str, Any]]:
-        """Hybrid retrieval using dense + sparse methods"""
+        """Retrieval using available methods (dense+sparse or TF-IDF fallback)"""
         if not self.initialized:
             return []
         
+        if self.use_dense:
+            # Use hybrid retrieval (dense + sparse)
+            return self._hybrid_retrieve(query, k, alpha)
+        else:
+            # Use TF-IDF fallback
+            return self._tfidf_retrieve(query, k)
+    
+    def _hybrid_retrieve(self, query: str, k: int = 5, alpha: float = 0.7) -> List[Dict[str, Any]]:
+        """Hybrid retrieval using dense + sparse methods"""
         # Preprocess query
         preprocessed_query = self.preprocessor.preprocess(query)
         
@@ -189,6 +237,28 @@ class SimpleAdvancedRAG:
             doc['retrieval_score'] = score
             doc['rank'] = len(results) + 1
             results.append(doc)
+        
+        return results
+    
+    def _tfidf_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """TF-IDF based retrieval as fallback"""
+        # Transform query
+        query_vector = self.tfidf_vectorizer.transform([query])
+        
+        # Calculate similarities
+        similarities = cosine_similarity(query_vector, self.tfidf_matrix)[0]
+        
+        # Get top-k indices
+        top_indices = similarities.argsort()[-k:][::-1]
+        
+        # Return results with scores
+        results = []
+        for idx in top_indices:
+            if similarities[idx] > 0.05:  # Minimum similarity threshold
+                doc = self.documents[idx].copy()
+                doc['retrieval_score'] = similarities[idx]
+                doc['rank'] = len(results) + 1
+                results.append(doc)
         
         return results
     
