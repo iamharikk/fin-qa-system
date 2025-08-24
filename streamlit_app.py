@@ -206,36 +206,17 @@ def main():
     # Initialize Advanced RAG System
     if 'advanced_rag' not in st.session_state:
         try:
-            from advanced_rag import AdvancedRAG
-            from embedding_indexer import EmbeddingIndexer
+            from simple_rag import SimpleAdvancedRAG
             
-            # Initialize with existing data using CSV directly
             csv_path = "data/tcs_qa_dataset.csv"
             
             if os.path.exists(csv_path):
-                # Load CSV data and create chunks
-                df = pd.read_csv(csv_path)
-                chunks_data = []
-                
-                for _, row in df.iterrows():
-                    chunks_data.append({
-                        'chunk_text': f"Question: {row['Question']} Answer: {row['Answer']}",
-                        'chunk_id': f"qa_{len(chunks_data)}",
-                        'chunk_size_target': 400,
-                        'original_question': row['Question'],
-                        'original_answer': row['Answer']
-                    })
-                
-                # Initialize indexer and create embeddings
-                indexer = EmbeddingIndexer()
-                indexer.chunks_data = chunks_data
-                indexer.chunk_embeddings = indexer.create_embeddings(chunks_data)
-                indexer.build_dense_index(indexer.chunk_embeddings)
-                indexer.build_sparse_index(chunks_data)
-                
-                # Create Advanced RAG system
-                st.session_state.advanced_rag = AdvancedRAG(indexer)
-                st.success("Advanced RAG System initialized!")
+                st.session_state.advanced_rag = SimpleAdvancedRAG(csv_path)
+                if st.session_state.advanced_rag.initialized:
+                    st.success("Advanced RAG System initialized!")
+                else:
+                    st.error("Failed to initialize Advanced RAG System.")
+                    st.session_state.advanced_rag = None
             else:
                 st.error("TCS dataset not found. Advanced RAG unavailable.")
                 st.session_state.advanced_rag = None
@@ -273,28 +254,7 @@ def main():
                 if model_choice == "Advanced RAG System":
                     if st.session_state.advanced_rag:
                         # Use advanced RAG system
-                        start_time = time.time()
-                        retrieved_results = st.session_state.advanced_rag.multi_stage_retrieve(
-                            query=user_query.strip(),
-                            stage1_k=15,
-                            final_k=5
-                        )
-                        
-                        # Generate answer from top result
-                        if retrieved_results:
-                            top_result = retrieved_results[0]
-                            answer = f"Based on the retrieved information: {top_result['chunk_text']}"
-                            confidence = top_result['cross_encoder_score']
-                        else:
-                            answer = "I don't have information to answer this question about TCS financial data."
-                            confidence = 0.0
-                        
-                        result = {
-                            'success': True,
-                            'answer': answer,
-                            'confidence_score': confidence,
-                            'response_time': time.time() - start_time
-                        }
+                        result = st.session_state.advanced_rag.process_query(user_query.strip())
                     else:
                         result = {
                             'success': False,
