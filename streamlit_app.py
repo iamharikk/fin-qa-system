@@ -11,8 +11,9 @@ from typing import Dict, Any, List
 from guardrails import validate_all_inputs
 from output_guardrails import OutputGuardrails
 
-# Add fine-tuned-system to path for imports
+# Add fine-tuned-system and rag-system to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'fine-tuned-system'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'rag-system'))
 
 class SimpleRAGSystem:
     """
@@ -202,10 +203,43 @@ def main():
     if 'output_guardrails' not in st.session_state:
         st.session_state.output_guardrails = OutputGuardrails()
     
+    # Initialize Advanced RAG System
+    if 'advanced_rag' not in st.session_state:
+        try:
+            from data_processor import DataProcessor
+            from embedding_indexer import EmbeddingIndexer
+            from simple_response_generator import SimpleResponseGenerator
+            
+            # Initialize with existing data
+            data_processor = DataProcessor()
+            csv_path = "data/tcs_qa_dataset.csv"
+            
+            if os.path.exists(csv_path):
+                processed_data = data_processor.process_csv(csv_path)
+                
+                indexer = EmbeddingIndexer()
+                chunks = []
+                for item in processed_data:
+                    chunks.append({
+                        'text': f"Q: {item['question']} A: {item['answer']}",
+                        'metadata': {'question': item['question'], 'answer': item['answer']}
+                    })
+                
+                indexer.index_chunks(chunks)
+                st.session_state.advanced_rag = SimpleResponseGenerator(indexer)
+                st.success("Advanced RAG System initialized!")
+            else:
+                st.error("TCS dataset not found. Advanced RAG unavailable.")
+                st.session_state.advanced_rag = None
+                
+        except Exception as e:
+            st.error(f"Failed to initialize Advanced RAG: {e}")
+            st.session_state.advanced_rag = None
+    
     # Model selection radio buttons
     model_choice = st.radio(
         "Select Model:",
-        ["RAG System", "Fine Tuned Model"],
+        ["Advanced RAG System", "Fine Tuned Model"],
         horizontal=True
     )
     
@@ -228,8 +262,27 @@ def main():
             st.error(f"Input validation failed: {error_message}")
         else:
             with st.spinner("Processing..."):
-                if model_choice == "RAG System":
-                    result = st.session_state.rag_system.process_query(user_query.strip())
+                if model_choice == "Advanced RAG System":
+                    if st.session_state.advanced_rag:
+                        # Use advanced RAG system
+                        advanced_result = st.session_state.advanced_rag.generate_response(
+                            query=user_query.strip(),
+                            broad_k=15,
+                            final_k=5
+                        )
+                        result = {
+                            'success': True,
+                            'answer': advanced_result.get('generated_response', 'No response generated'),
+                            'confidence_score': advanced_result.get('confidence_score', 0.5),
+                            'response_time': advanced_result.get('total_time', 0.0)
+                        }
+                    else:
+                        result = {
+                            'success': False,
+                            'answer': "Advanced RAG system is not available.",
+                            'confidence_score': 0.0,
+                            'response_time': 0.0
+                        }
                 else:
                     result = st.session_state.finetuned_system.process_query(user_query.strip())
             

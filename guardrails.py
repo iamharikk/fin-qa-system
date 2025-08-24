@@ -47,7 +47,7 @@ def validate_length(text: str, min_length: int = 5, max_length: int = 1000) -> T
 
 def validate_method(method: str) -> Tuple[bool, str]:
     valid_methods = [
-        "RAG System",
+        "Advanced RAG System",
         "Fine Tuned Model"
     ]
     
