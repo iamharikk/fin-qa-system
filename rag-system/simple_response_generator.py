@@ -3,7 +3,6 @@ import time
 from typing import Dict, Any, List
 from advanced_rag import AdvancedRAG
 from embedding_indexer import EmbeddingIndexer
-from guardrails import RAGGuardrails
 
 class SimpleResponseGenerator:
     """
@@ -20,7 +19,6 @@ class SimpleResponseGenerator:
         """
         # Initialize advanced RAG system for retrieval
         self.advanced_rag = AdvancedRAG(indexer)
-        self.guardrails = RAGGuardrails()
         
         print("Simple response generator initialized")
     

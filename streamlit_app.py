@@ -9,6 +9,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Dict, Any, List
 from guardrails import validate_all_inputs
+from output_guardrails import OutputGuardrails
 
 # Add fine-tuned-system to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'fine-tuned-system'))
@@ -198,6 +199,9 @@ def main():
     if 'finetuned_system' not in st.session_state:
         st.session_state.finetuned_system = FineTunedModel()
     
+    if 'output_guardrails' not in st.session_state:
+        st.session_state.output_guardrails = OutputGuardrails()
+    
     # Model selection radio buttons
     model_choice = st.radio(
         "Select Model:",
@@ -228,6 +232,25 @@ def main():
                     result = st.session_state.rag_system.process_query(user_query.strip())
                 else:
                     result = st.session_state.finetuned_system.process_query(user_query.strip())
+            
+            # Apply output guardrails validation
+            if result['success']:
+                validation = st.session_state.output_guardrails.validate_output(
+                    query=user_query.strip(),
+                    response=result['answer'],
+                    confidence=result.get('confidence_score', 0.0)
+                )
+                
+                # Update result based on validation
+                if not validation['is_valid']:
+                    result['answer'] = validation['corrected_response']
+                    result['confidence_score'] = max(0.0, result['confidence_score'] * validation['validation_score'])
+                
+                # Show validation warnings if any
+                if validation['warnings']:
+                    with st.expander("Output Validation Warnings"):
+                        for warning in validation['warnings']:
+                            st.warning(warning)
             
             # Output section
             st.markdown("### Answer")
