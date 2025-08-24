@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering, pipeline
 import time
 from typing import Dict, Any
 
@@ -19,10 +19,10 @@ class FineTunedFinQA:
         self.model_name = model_name
         self.tokenizer = None
         self.model = None
-        self.generator = None
+        self.qa_pipeline = None
         self.initialized = False
         
-        print(f"Initializing fine-tuned model: {model_name}")
+        print(f"Initializing fine-tuned DistilBERT model: {model_name}")
     
     def load_model(self):
         """Load the fine-tuned model and tokenizer"""
@@ -31,30 +31,51 @@ class FineTunedFinQA:
             print("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             
-            print("Loading model...")
-            self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+            print("Loading DistilBERT model...")
+            self.model = AutoModelForQuestionAnswering.from_pretrained(self.model_name)
             
-            # Create text generation pipeline
-            self.generator = pipeline(
-                "text-generation",
+            # Create question-answering pipeline
+            self.qa_pipeline = pipeline(
+                "question-answering",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                device=0 if torch.cuda.is_available() else -1,  # Use GPU if available
-                max_length=512,
-                do_sample=True,
-                temperature=0.7
+                device=0 if torch.cuda.is_available() else -1  # Use GPU if available
             )
             
             self.initialized = True
-            print("Fine-tuned model loaded successfully!")
+            print("Fine-tuned DistilBERT model loaded successfully!")
             
         except Exception as e:
             print(f"Error loading model: {e}")
             self.initialized = False
     
+    def create_context(self) -> str:
+        """
+        Create context from TCS financial data for the QA model
+        Since DistilBERT QA needs context, we provide the financial data
+        """
+        context = """
+        TCS Financial Data:
+        TCS revenue in 2025 was Rs 21485300 crores. TCS revenue in 2024 was Rs 20235900 crores.
+        TCS other income in 2025 was Rs 950700 crores. TCS other income in 2024 was Rs 626800 crores.
+        TCS total income in 2025 was Rs 22436000 crores. TCS total income in 2024 was Rs 20862700 crores.
+        TCS net profit in 2025 was Rs 4805700 crores. TCS net profit in 2024 was Rs 4355900 crores.
+        TCS operating profit in 2025 was Rs 5792900 crores. TCS operating profit in 2024 was Rs 5584700 crores.
+        TCS profit before tax in 2025 was Rs 6251300 crores. TCS profit before tax in 2024 was Rs 5755500 crores.
+        TCS employee cost in 2025 was Rs 10730000 crores. TCS employee cost in 2024 was Rs 10313900 crores.
+        TCS total expenses in 2025 were Rs 15692400 crores. TCS total expenses in 2024 were Rs 14651200 crores.
+        TCS cash and bank balance in 2025 was Rs 715200 crores. TCS cash and bank balance in 2024 was Rs 659900 crores.
+        TCS sundry debtors in 2025 were Rs 5176700 crores. TCS sundry debtors in 2024 were Rs 4606800 crores.
+        TCS investments in 2025 were Rs 3280200 crores. TCS investments in 2024 were Rs 3224500 crores.
+        TCS earnings per share in 2025 was Rs 13282. TCS earnings per share in 2024 was Rs 12039.
+        TCS book value per share in 2025 was Rs 20900. TCS book value per share in 2024 was Rs 19933.
+        TCS networth in 2025 was Rs 7561700 crores. TCS networth in 2024 was Rs 7212000 crores.
+        """
+        return context
+    
     def process_query(self, query: str) -> Dict[str, Any]:
         """
-        Process user query using the fine-tuned model directly
+        Process user query using the fine-tuned DistilBERT QA model
         
         Args:
             query: User's financial question
@@ -88,40 +109,31 @@ class FineTunedFinQA:
             }
         
         try:
-            # Generate answer directly from the fine-tuned model
-            # Format the input as the model was likely trained
-            prompt = f"Question: {query}\nAnswer:"
+            # Get context for the QA model
+            context = self.create_context()
             
-            result = self.generator(
-                prompt,
-                max_new_tokens=100,
-                num_return_sequences=1,
-                pad_token_id=self.tokenizer.eos_token_id,
-                truncation=True
+            # Use the fine-tuned DistilBERT QA model
+            result = self.qa_pipeline(
+                question=query,
+                context=context,
+                max_answer_len=150,
+                handle_impossible_answer=True
             )
             
-            # Extract the generated answer
-            generated_text = result[0]['generated_text']
+            # Extract answer and confidence
+            answer = result['answer'].strip()
+            confidence = result['score']
             
-            # Extract only the answer part (after "Answer:")
-            if "Answer:" in generated_text:
-                answer = generated_text.split("Answer:")[-1].strip()
-            else:
-                answer = generated_text[len(prompt):].strip()
-            
-            # Clean up the answer
-            answer = answer.split('\n')[0]  # Take only first line
-            if len(answer) > 200:  # Limit answer length
-                answer = answer[:200] + "..."
-            
-            # Simple confidence scoring based on answer quality
-            confidence = 0.8 if answer and len(answer) > 10 else 0.3
+            # Post-process answer
+            if not answer or confidence < 0.05:
+                answer = "I couldn't find a confident answer in the TCS financial data."
+                confidence = 0.0
             
             processing_time = time.time() - start_time
             
             return {
                 'success': True,
-                'answer': answer if answer else "No answer generated.",
+                'answer': answer,
                 'confidence_score': confidence,
                 'response_time': processing_time,
                 'model_used': self.model_name
