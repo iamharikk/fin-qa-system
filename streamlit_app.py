@@ -25,28 +25,29 @@ class SimpleRAGSystem:
         self.initialized = False
     
     def load_sample_data(self):
-        """Load TCS financial data"""
-        # TCS financial data
-        sample_data = [
-            {"question": "What was TCS revenue in 2025?", "answer": "TCS revenue in 2025 was Rs 21485300 crores."},
-            {"question": "What was TCS revenue in 2024?", "answer": "TCS revenue in 2024 was Rs 20235900 crores."},
-            {"question": "What was TCS other income in 2025?", "answer": "TCS other income in 2025 was Rs 950700 crores."},
-            {"question": "What was TCS other income in 2024?", "answer": "TCS other income in 2024 was Rs 626800 crores."},
-            {"question": "What was TCS net profit in 2025?", "answer": "TCS net profit in 2025 was Rs 4805700 crores."},
-            {"question": "What was TCS net profit in 2024?", "answer": "TCS net profit in 2024 was Rs 4355900 crores."},
-            {"question": "What was TCS employee cost in 2025?", "answer": "TCS employee cost in 2025 was Rs 10730000 crores."},
-            {"question": "What was TCS employee cost in 2024?", "answer": "TCS employee cost in 2024 was Rs 10313900 crores."},
-            {"question": "What were TCS total expenses in 2025?", "answer": "TCS total expenses in 2025 were Rs 15692400 crores."},
-            {"question": "What were TCS total expenses in 2024?", "answer": "TCS total expenses in 2024 were Rs 14651200 crores."},
-            {"question": "What was TCS cash and bank balance in 2025?", "answer": "TCS cash and bank balance in 2025 was Rs 715200 crores."},
-            {"question": "What was TCS cash and bank balance in 2024?", "answer": "TCS cash and bank balance in 2024 was Rs 659900 crores."},
-            {"question": "What was TCS operating profit in 2025?", "answer": "TCS operating profit in 2025 was Rs 5792900 crores."},
-            {"question": "What was TCS operating profit in 2024?", "answer": "TCS operating profit in 2024 was Rs 5584700 crores."},
-            {"question": "What was TCS profit before tax in 2025?", "answer": "TCS profit before tax in 2025 was Rs 6251300 crores."},
-            {"question": "What was TCS profit before tax in 2024?", "answer": "TCS profit before tax in 2024 was Rs 5755500 crores."},
-        ]
-        
-        self.dataset = pd.DataFrame(sample_data)
+        """Load TCS financial data from CSV"""
+        try:
+            # Load data from CSV file
+            csv_path = os.path.join(os.path.dirname(__file__), 'data', 'tcs_qa_dataset.csv')
+            df = pd.read_csv(csv_path)
+            
+            # Convert to the expected format
+            sample_data = []
+            for _, row in df.iterrows():
+                sample_data.append({
+                    "question": row['Question'],
+                    "answer": row['Answer']
+                })
+            
+            self.dataset = pd.DataFrame(sample_data)
+        except Exception as e:
+            print(f"Error loading CSV data: {e}")
+            # Fallback to hardcoded data if CSV fails
+            sample_data = [
+                {"question": "What was TCS revenue in 2025?", "answer": "TCS revenue in 2025 was Rs 21485300 crores."},
+                {"question": "What was TCS revenue in 2024?", "answer": "TCS revenue in 2024 was Rs 20235900 crores."},
+            ]
+            self.dataset = pd.DataFrame(sample_data)
         
         # Create TF-IDF vectors
         combined_texts = []
